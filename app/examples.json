@@ -1,0 +1,362 @@
+{
+  "numerico": {
+    "title": "Ajustar una recta a medidas de un sensor",
+    "dependencies": "numpy",
+    "inputs": "Medidas sintéticas de entrada y salida.",
+    "output": "Coeficientes cercanos a pendiente 2 y offset 1.",
+    "note": "Un ajuste numérico no comprueba por sí solo que el modelo físico sea correcto.",
+    "code": "import numpy as np\n\nrng = np.random.default_rng(42)\nx = np.linspace(0, 10, 100)\ny = 2 * x + 1 + rng.normal(0, 0.2, x.size)\n# Resolvemos y = pendiente*x + offset por mínimos cuadrados.\nA = np.column_stack([x, np.ones_like(x)])\ncoeficientes, *_ = np.linalg.lstsq(A, y, rcond=None)\nprint(dict(pendiente=coeficientes[0], offset=coeficientes[1]))\n",
+    "source": "https://numpy.org/doc/stable/reference/generated/numpy.linalg.lstsq.html",
+    "validation": "executed"
+  },
+  "tablas": {
+    "title": "Limpiar y agregar medidas por máquina",
+    "dependencies": "pandas",
+    "inputs": "Tabla pequeña incluida en el código.",
+    "output": "Temperatura media por máquina, sin valores ausentes.",
+    "note": "Aquí eliminamos medidas ausentes; en tu proyecto decide si debes imputarlas.",
+    "code": "import pandas as pd\n\ndf = pd.DataFrame({\n    \"maquina\": [\"A\", \"A\", \"B\", \"B\"],\n    \"temperatura\": [30.0, None, 42.0, 44.0],\n})\nlimpio = df.dropna(subset=[\"temperatura\"])\nresumen = limpio.groupby(\"maquina\")[\"temperatura\"].mean()\nprint(resumen)  # A: 30.0; B: 43.0\n",
+    "source": "https://pandas.pydata.org/docs/user_guide/groupby.html",
+    "validation": "executed"
+  },
+  "calidad": {
+    "title": "Rechazar datos fuera del contrato",
+    "dependencies": "pandas pandera[pandas]",
+    "inputs": "DataFrame con una temperatura fuera de rango.",
+    "output": "Un error de validación que identifica el dato inválido.",
+    "note": "Los límites del contrato deben proceder de tu sensor o proceso.",
+    "code": "import pandas as pd\nimport pandera.pandas as pa\n\nschema = pa.DataFrameSchema({\n    \"maquina\": pa.Column(str, nullable=False),\n    \"temperatura\": pa.Column(float, pa.Check.in_range(-20, 150)),\n})\ndf = pd.DataFrame({\"maquina\": [\"A\", \"B\"], \"temperatura\": [25.0, 180.0]})\ntry:\n    schema.validate(df, lazy=True)\nexcept pa.errors.SchemaErrors as error:\n    print(error.failure_cases)  # Detecta la temperatura de 180 grados.\n",
+    "source": "https://pandera.readthedocs.io/en/stable/dataframe_schemas.html",
+    "validation": "syntax"
+  },
+  "visualizar": {
+    "title": "Visualizar ruido y tendencia de un sensor",
+    "dependencies": "numpy matplotlib",
+    "inputs": "Serie sintética generada con semilla fija.",
+    "output": "Archivo sensor.png con la señal y la tendencia.",
+    "note": "Guarda unidades y condiciones del ensayo junto a la figura.",
+    "code": "import numpy as np\nimport matplotlib.pyplot as plt\n\nrng = np.random.default_rng(42)\nt = np.arange(100) / 10\nmedidas = 20 + 0.5 * t + rng.normal(0, 0.4, t.size)\nfig, ax = plt.subplots(figsize=(7, 3))\nax.plot(t, medidas, label=\"Sensor\")\nax.plot(t, 20 + 0.5 * t, label=\"Tendencia\")\nax.set(xlabel=\"Tiempo (s)\", ylabel=\"Temperatura (°C)\")\nax.legend()\nfig.tight_layout()\nfig.savefig(\"sensor.png\", dpi=150)\nplt.close(fig)\n",
+    "source": "https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.plot.html",
+    "validation": "executed"
+  },
+  "estadistica": {
+    "title": "Intervalo de confianza para una media",
+    "dependencies": "numpy scipy",
+    "inputs": "Ocho medidas independientes incluidas.",
+    "output": "Media e intervalo de confianza del 95 %.",
+    "note": "Este intervalo asume observaciones independientes; para series correlacionadas cambia el método.",
+    "code": "import numpy as np\nfrom scipy import stats\n\nmedidas = np.array([10.1, 9.8, 10.2, 10.0, 9.9, 10.3, 10.1, 10.0])\nmedia = medidas.mean()\n# Intervalo t para la media de observaciones independientes.\nic = stats.t.interval(0.95, df=len(medidas)-1,\n                      loc=media, scale=stats.sem(medidas))\nprint({\"media\": media, \"IC95\": ic})\n",
+    "source": "https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.sem.html",
+    "validation": "executed"
+  },
+  "validacion": {
+    "title": "Evaluar sin mezclar máquinas entre folds",
+    "dependencies": "numpy scikit-learn",
+    "inputs": "120 muestras sintéticas pertenecientes a seis máquinas.",
+    "output": "R² por fold usando máquinas distintas para entrenar y evaluar.",
+    "note": "La estructura de grupos es ilustrativa; conserva los grupos reales de adquisición.",
+    "code": "import numpy as np\nfrom sklearn.model_selection import GroupKFold, cross_val_score\nfrom sklearn.linear_model import Ridge\n\nrng = np.random.default_rng(42)\nX = rng.normal(size=(120, 3))\ny = 2 * X[:, 0] + rng.normal(0, 0.2, 120)\ngrupo = np.repeat(np.arange(6), 20)\n# Cada máquina aparece exclusivamente en train o validación.\ncv = GroupKFold(n_splits=3)\nscores = cross_val_score(Ridge(), X, y, groups=grupo, cv=cv, scoring=\"r2\")\nprint(scores)\n",
+    "source": "https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GroupKFold.html",
+    "validation": "executed"
+  },
+  "preprocesado": {
+    "title": "Preparar columnas numéricas y categóricas",
+    "dependencies": "pandas scikit-learn",
+    "inputs": "Datos de dos variables de proceso y una etiqueta binaria.",
+    "output": "Predicción para una entrada nueva sin ajustar el preprocesado de nuevo.",
+    "note": "Es un ejemplo de Pipeline; para estimar calidad añade una partición y evaluación independientes.",
+    "code": "import pandas as pd\nfrom sklearn.compose import ColumnTransformer\nfrom sklearn.pipeline import make_pipeline\nfrom sklearn.impute import SimpleImputer\nfrom sklearn.preprocessing import StandardScaler, OneHotEncoder\nfrom sklearn.linear_model import LogisticRegression\n\nX = pd.DataFrame({\"temp\": [20, 22, 25, 70, 75, 80],\n                  \"tipo\": [\"A\", \"B\", \"A\", \"B\", \"A\", \"B\"]})\ny = [0, 0, 0, 1, 1, 1]\nprep = ColumnTransformer([\n    (\"numero\", make_pipeline(SimpleImputer(), StandardScaler()), [\"temp\"]),\n    (\"categoria\", OneHotEncoder(handle_unknown=\"ignore\"), [\"tipo\"]),\n])\nmodel = make_pipeline(prep, LogisticRegression())\nmodel.fit(X, y)  # Solo se ajustan transformaciones con train.\nnuevo = pd.DataFrame({\"temp\": [73], \"tipo\": [\"A\"]})\nprint(model.predict(nuevo))\n",
+    "source": "https://scikit-learn.org/stable/modules/compose.html",
+    "validation": "executed"
+  },
+  "baseline": {
+    "title": "Crear un baseline de clasificación",
+    "dependencies": "scikit-learn",
+    "inputs": "Dataset Iris incluido en scikit-learn.",
+    "output": "Accuracy en test, separado antes de entrenar.",
+    "note": "Iris es didáctico; escoge la métrica y la partición que correspondan a tu aplicación.",
+    "code": "from sklearn.datasets import load_iris\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.pipeline import make_pipeline\nfrom sklearn.preprocessing import StandardScaler\nfrom sklearn.linear_model import LogisticRegression\nfrom sklearn.metrics import accuracy_score\n\nX, y = load_iris(return_X_y=True)\nXtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.25,\n                                    stratify=y, random_state=42)\nmodel = make_pipeline(StandardScaler(), LogisticRegression(max_iter=500))\nmodel.fit(Xtr, ytr)\nprint(\"Accuracy test:\", accuracy_score(yte, model.predict(Xte)))\n",
+    "source": "https://scikit-learn.org/stable/modules/generated/sklearn.pipeline.make_pipeline.html",
+    "validation": "executed"
+  },
+  "boosting": {
+    "title": "Comparar CatBoost y XGBoost con el mismo split",
+    "dependencies": "scikit-learn catboost xgboost",
+    "inputs": "Dataset binario de ejemplo incluido en scikit-learn.",
+    "output": "ROC AUC de ambos modelos sobre el mismo test.",
+    "note": "Las configuraciones son baselines; ajusta en validación antes de usar el test final.",
+    "code": "from sklearn.datasets import load_breast_cancer\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.metrics import roc_auc_score\nfrom catboost import CatBoostClassifier\nfrom xgboost import XGBClassifier\n\nX, y = load_breast_cancer(return_X_y=True)\nXtr, Xte, ytr, yte = train_test_split(X, y, stratify=y, random_state=42)\nmodelos = {\n    \"CatBoost\": CatBoostClassifier(iterations=100, verbose=False, random_seed=42),\n    \"XGBoost\": XGBClassifier(n_estimators=100, max_depth=4, random_state=42),\n}\nfor nombre, modelo in modelos.items():\n    modelo.fit(Xtr, ytr)\n    score = roc_auc_score(yte, modelo.predict_proba(Xte)[:, 1])\n    print(nombre, score)\n",
+    "source": "https://catboost.ai/docs/en/concepts/python-usages-examples.html",
+    "validation": "syntax"
+  },
+  "no-supervisado": {
+    "title": "Detectar una medida atípica con Isolation Forest",
+    "dependencies": "numpy scikit-learn",
+    "inputs": "Una nube de medidas normales y un caso alejado.",
+    "output": "La predicción -1 para el caso sintético atípico.",
+    "note": "En producción, calibra el umbral con casos reales y costes de falsas alarmas.",
+    "code": "import numpy as np\nfrom sklearn.ensemble import IsolationForest\n\nrng = np.random.default_rng(42)\nnormal = rng.normal(0, 0.3, (200, 2))\n# Se ajusta sobre el régimen normal conocido.\nmodel = IsolationForest(contamination=0.02, random_state=42)\nmodel.fit(normal)\nnuevo = np.array([[0.1, -0.1], [5.0, 5.0]])\nprint(model.predict(nuevo))  # 1: normal; -1: atípico.\n",
+    "source": "https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.IsolationForest.html",
+    "validation": "executed"
+  },
+  "interpretar": {
+    "title": "Calcular permutation importance en datos no usados",
+    "dependencies": "scikit-learn",
+    "inputs": "Dataset Iris y partición de entrenamiento/test.",
+    "output": "Importancia media de las cuatro variables para el modelo.",
+    "note": "Las variables correlacionadas pueden repartir importancia; no interpretes esto como causalidad.",
+    "code": "from sklearn.datasets import load_iris\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.ensemble import RandomForestClassifier\nfrom sklearn.inspection import permutation_importance\n\niris = load_iris()\nXtr, Xte, ytr, yte = train_test_split(iris.data, iris.target,\n                                    stratify=iris.target, random_state=42)\nmodel = RandomForestClassifier(n_estimators=100, random_state=42).fit(Xtr, ytr)\n# Medimos cuánto empeora el score al permutar una variable en test.\nr = permutation_importance(model, Xte, yte, n_repeats=10, random_state=42)\nprint(dict(zip(iris.feature_names, r.importances_mean)))\n",
+    "source": "https://scikit-learn.org/stable/modules/permutation_importance.html",
+    "validation": "executed"
+  },
+  "vision-clasica": {
+    "title": "Segmentar una pieza por umbral y contorno",
+    "dependencies": "numpy opencv-python",
+    "inputs": "Imagen sintética de una pieza sobre fondo negro.",
+    "output": "Bounding box aproximada de la pieza.",
+    "note": "Este ejemplo controlado necesita adaptación a iluminación, ruido y perspectiva reales.",
+    "code": "import numpy as np\nimport cv2\n\nimagen = np.zeros((240, 320), dtype=np.uint8)\ncv2.rectangle(imagen, (80, 60), (220, 180), 200, -1)\n_, mascara = cv2.threshold(imagen, 100, 255, cv2.THRESH_BINARY)\ncontornos, _ = cv2.findContours(mascara, cv2.RETR_EXTERNAL,\n                               cv2.CHAIN_APPROX_SIMPLE)\npieza = max(contornos, key=cv2.contourArea)\nx, y, ancho, alto = cv2.boundingRect(pieza)\nprint({\"bbox_xywh\": [x, y, ancho, alto]})\n",
+    "source": "https://docs.opencv.org/4.x/d4/d73/tutorial_py_contours_begin.html",
+    "validation": "syntax"
+  },
+  "deteccion": {
+    "title": "Detectar objetos y leer cajas de YOLO",
+    "dependencies": "ultralytics",
+    "inputs": "Archivo local escena.jpg; pesos YOLO26n descargables al primer uso.",
+    "output": "Clases, confianzas y cajas xyxy de los objetos detectados.",
+    "note": "Necesitas conexión para descargar pesos la primera vez. Para clases industriales, adapta el detector.",
+    "code": "from pathlib import Path\nfrom ultralytics import YOLO\n\nimagen = Path(\"escena.jpg\")\nif not imagen.is_file():\n    raise FileNotFoundError(\"Coloca una imagen real en escena.jpg\")\nmodel = YOLO(\"yolo26n.pt\")\nresult = model.predict(source=str(imagen), conf=0.4, verbose=False)[0]\nfor caja, clase, confianza in zip(result.boxes.xyxy,\n                                  result.boxes.cls, result.boxes.conf):\n    print(result.names[int(clase)], float(confianza), caja.tolist())\n",
+    "source": "https://docs.ultralytics.com/usage/python/",
+    "validation": "syntax"
+  },
+  "segmentacion": {
+    "title": "Crear una máscara con un punto de SAM 2",
+    "dependencies": "Instala SAM 2 desde su repositorio oficial; requiere torch, pillow y numpy.",
+    "inputs": "escena.jpg, checkpoint sam2.1_hiera_small.pt y configuración del repositorio.",
+    "output": "Máscaras y scores para un punto colocado dentro del objeto.",
+    "note": "Ajusta el punto al objeto de tu imagen. Los scores no equivalen a la IoU medida con ground truth.",
+    "code": "import numpy as np\nimport torch\nfrom PIL import Image\nfrom sam2.build_sam import build_sam2\nfrom sam2.sam2_image_predictor import SAM2ImagePredictor\n\nimagen = np.array(Image.open(\"escena.jpg\").convert(\"RGB\"))\ndevice = \"cuda\" if torch.cuda.is_available() else \"cpu\"\nmodel = build_sam2(\"configs/sam2.1/sam2.1_hiera_s.yaml\",\n                  \"sam2.1_hiera_small.pt\", device=device)\npredictor = SAM2ImagePredictor(model)\nwith torch.inference_mode():\n    predictor.set_image(imagen)\n    masks, scores, _ = predictor.predict(\n        point_coords=np.array([[100, 100]]),  # Coordenadas x, y.\n        point_labels=np.array([1]),          # Punto positivo.\n        multimask_output=True,\n    )\nprint(masks.shape, scores)\n",
+    "source": "https://github.com/facebookresearch/sam2",
+    "validation": "syntax"
+  },
+  "profundidad": {
+    "title": "Obtener profundidad relativa con Depth Anything V2",
+    "dependencies": "Instala Depth Anything V2 desde el repositorio; torch y opencv-python.",
+    "inputs": "escena.jpg y checkpoint depth_anything_v2_vits.pth descargado.",
+    "output": "Mapa H×W de profundidad relativa.",
+    "note": "Esta salida no está en metros. La localización métrica requiere checkpoint métrico y validación de escala.",
+    "code": "import cv2\nimport torch\nfrom depth_anything_v2.dpt import DepthAnythingV2\n\nmodel = DepthAnythingV2(encoder=\"vits\", features=64,\n                       out_channels=[48, 96, 192, 384])\nweights = torch.load(\"depth_anything_v2_vits.pth\", map_location=\"cpu\",\n                     weights_only=True)\nmodel.load_state_dict(weights)\nmodel.eval()\nimagen = cv2.imread(\"escena.jpg\")\nif imagen is None:\n    raise FileNotFoundError(\"Falta escena.jpg\")\nwith torch.inference_mode():\n    profundidad = model.infer_image(imagen)\nprint(profundidad.shape)  # Misma altura y anchura que la imagen.\n",
+    "source": "https://github.com/DepthAnything/Depth-Anything-V2",
+    "validation": "syntax"
+  },
+  "geometria": {
+    "title": "Proyectar un píxel a 3D en el marco de cámara",
+    "dependencies": "numpy",
+    "inputs": "Intrínsecos ilustrativos y distancia Z métrica conocida.",
+    "output": "Punto [X,Y,Z] expresado en metros en el marco de cámara.",
+    "note": "Z es distancia sobre el eje óptico, no distancia euclídea. Usa tu calibración y profundidad válidas.",
+    "code": "import numpy as np\n\nfx, fy, cx, cy = 600.0, 600.0, 320.0, 240.0\nu, v = 380.0, 210.0\nZ = 2.0  # Profundidad métrica a lo largo del eje óptico.\nX = (u - cx) * Z / fx\nY = (v - cy) * Z / fy\npunto_camara = np.array([X, Y, Z])\nprint(punto_camara)  # [0.2, -0.1, 2.0]\n# Para pasar a mundo necesitas una transformación extrínseca válida.\n",
+    "source": "https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html",
+    "validation": "executed"
+  },
+  "entrenar-red": {
+    "title": "Entrenar una regresión mínima con PyTorch",
+    "dependencies": "torch",
+    "inputs": "200 pares sintéticos generados en el código.",
+    "output": "Una pérdida decreciente y parámetros cercanos a y=2x+1.",
+    "note": "Demuestra el bucle de entrenamiento; para medir generalización añade validación y test.",
+    "code": "import torch\nfrom torch import nn\n\ntorch.manual_seed(42)\nX = torch.randn(200, 1)\ny = 2 * X + 1\nmodel = nn.Linear(1, 1)\noptimizer = torch.optim.SGD(model.parameters(), lr=0.1)\nfor step in range(100):\n    pred = model(X)\n    loss = nn.functional.mse_loss(pred, y)\n    optimizer.zero_grad()\n    loss.backward()\n    optimizer.step()\nprint(\"Pérdida:\", loss.item())\nprint(\"Pendiente:\", model.weight.item(), \"Offset:\", model.bias.item())\n",
+    "source": "https://docs.pytorch.org/tutorials/beginner/basics/optimization_tutorial.html",
+    "validation": "syntax"
+  },
+  "transfer": {
+    "title": "Adaptar la cabeza de un ResNet18",
+    "dependencies": "torch torchvision pillow",
+    "inputs": "pieza.jpg y pesos preentrenados descargables de Torchvision.",
+    "output": "Logits de una cabeza nueva de tres clases; todavía no son predicciones entrenadas.",
+    "note": "La cabeza inicializada al azar debe entrenarse con tus datos etiquetados.",
+    "code": "import torch\nfrom torch import nn\nfrom PIL import Image\nfrom torchvision.models import resnet18, ResNet18_Weights\n\nweights = ResNet18_Weights.DEFAULT\nmodel = resnet18(weights=weights)\nfor parameter in model.parameters():\n    parameter.requires_grad = False  # Congelamos el backbone.\nmodel.fc = nn.Linear(model.fc.in_features, 3)\nimage = Image.open(\"pieza.jpg\").convert(\"RGB\")\nX = weights.transforms()(image).unsqueeze(0)\nmodel.eval()\nwith torch.inference_mode():\n    logits = model(X)\nprint(logits.shape)  # [1, 3]; falta entrenar la cabeza.\n",
+    "source": "https://docs.pytorch.org/vision/stable/models.html",
+    "validation": "syntax"
+  },
+  "aumentar": {
+    "title": "Aplicar una augmentación coherente a imagen y máscara",
+    "dependencies": "torch torchvision",
+    "inputs": "Tensor RGB sintético y máscara de una pieza.",
+    "output": "Imagen y máscara transformadas con la misma geometría.",
+    "note": "El ejemplo muestra flip horizontal; comprueba que cada augmentación tenga sentido físico.",
+    "code": "import torch\nfrom torchvision.transforms import v2\nfrom torchvision import tv_tensors\n\nimage = tv_tensors.Image(torch.zeros(3, 64, 64, dtype=torch.uint8))\nmask = tv_tensors.Mask(torch.zeros(64, 64, dtype=torch.uint8))\nimage[:, 20:40, 10:25] = 255\nmask[20:40, 10:25] = 1\n# Una transformación compartida respeta la alineación de etiquetas.\naugment = v2.RandomHorizontalFlip(p=1.0)\nimage_aug, mask_aug = augment(image, mask)\nprint(image_aug.shape, mask_aug.shape, int(mask_aug.sum()))\n",
+    "source": "https://docs.pytorch.org/vision/stable/transforms.html",
+    "validation": "syntax"
+  },
+  "signal": {
+    "title": "Separar frecuencias en una señal muestreada",
+    "dependencies": "numpy scipy",
+    "inputs": "Señal sintética de 5 Hz con interferencia de 40 Hz; muestreo a 200 Hz.",
+    "output": "Frecuencia del pico dominante, alrededor de 5 Hz.",
+    "note": "La FFT asume muestreo uniforme; aquí se trabaja con una ventana de un segundo.",
+    "code": "import numpy as np\nfrom scipy.signal import butter, sosfilt\n\nfs = 200.0\nt = np.arange(200) / fs\nx = np.sin(2*np.pi*5*t) + 0.3*np.sin(2*np.pi*40*t)\nsos = butter(4, 10, fs=fs, output=\"sos\")\nfiltrada = sosfilt(sos, x)  # Filtro causal; tiene transitorio inicial.\nfreq = np.fft.rfftfreq(len(filtrada), d=1/fs)\nespectro = np.abs(np.fft.rfft(filtrada))\nprint(\"Pico dominante (Hz):\", freq[np.argmax(espectro)])\n",
+    "source": "https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.sosfilt.html",
+    "validation": "executed"
+  },
+  "forecast": {
+    "title": "Comparar forecasting contra SeasonalNaive",
+    "dependencies": "numpy pandas statsforecast",
+    "inputs": "90 días sintéticos con estacionalidad semanal.",
+    "output": "MAE en los últimos 14 días para dos métodos.",
+    "note": "Este holdout demuestra el horizonte; amplíalo a varias ventanas de backtesting.",
+    "code": "import numpy as np\nimport pandas as pd\nfrom statsforecast import StatsForecast\nfrom statsforecast.models import AutoETS, SeasonalNaive\n\nrng = np.random.default_rng(42)\ny = 20 + 3*np.sin(2*np.pi*np.arange(90)/7) + rng.normal(0, 0.2, 90)\ndf = pd.DataFrame({\"unique_id\": \"A\", \"ds\": pd.date_range(\"2026-01-01\", periods=90), \"y\": y})\ntrain, test = df.iloc[:-14], df.iloc[-14:]\nsf = StatsForecast(models=[AutoETS(season_length=7), SeasonalNaive(season_length=7)], freq=\"D\")\npred = sf.forecast(df=train, h=14).merge(test, on=[\"unique_id\", \"ds\"])\nfor column in [\"AutoETS\", \"SeasonalNaive\"]:\n    print(column, \"MAE:\", np.mean(np.abs(pred[column] - pred[\"y\"])))\n",
+    "source": "https://nixtlaverse.nixtla.io/statsforecast/docs/getting-started/getting_started_complete.html",
+    "validation": "syntax"
+  },
+  "features-series": {
+    "title": "Extraer features sencillas de ventanas de sensores",
+    "dependencies": "numpy pandas tsfresh",
+    "inputs": "Dos ventanas de 30 muestras identificadas por id.",
+    "output": "Una fila de features por ventana.",
+    "note": "En datasets reales separa sesiones antes de crear ventanas y de seleccionar features.",
+    "code": "import numpy as np\nimport pandas as pd\nfrom tsfresh import extract_features\n\nsignal = np.sin(np.arange(60)/3)\ndf = pd.DataFrame({\"id\": np.repeat([0, 1], 30),\n                   \"tiempo\": np.tile(np.arange(30), 2), \"valor\": signal})\nfeatures = extract_features(df, column_id=\"id\", column_sort=\"tiempo\",\n    default_fc_parameters={\"mean\": None, \"standard_deviation\": None},\n    n_jobs=0, disable_progressbar=True)\nprint(features)  # Dos filas, media y desviación por ventana.\n",
+    "source": "https://tsfresh.readthedocs.io/en/latest/text/quick_start.html",
+    "validation": "syntax"
+  },
+  "online": {
+    "title": "Evaluar prediciendo antes de aprender",
+    "dependencies": "river",
+    "inputs": "Flujo sintético de observaciones y etiquetas.",
+    "output": "MAE prequential tras cada actualización.",
+    "note": "En producción, actualiza cuando llegue la etiqueta; considera su retraso.",
+    "code": "from river import linear_model, preprocessing, metrics\n\nmodel = preprocessing.StandardScaler() | linear_model.LinearRegression()\nmetric = metrics.MAE()\nfor i in range(1, 101):\n    x, y = {\"sensor\": i / 100}, 2 * i / 100 + 1\n    pred = model.predict_one(x)  # Primero predecimos.\n    metric.update(y, pred)\n    model.learn_one(x, y)        # Después utilizamos la etiqueta.\nprint(metric)\n",
+    "source": "https://github.com/online-ml/river",
+    "validation": "syntax"
+  },
+  "hparams": {
+    "title": "Buscar regularización con validación cruzada",
+    "dependencies": "numpy scipy scikit-learn",
+    "inputs": "Dataset sintético y búsqueda pequeña incluida.",
+    "output": "Mejor alpha de Ridge usando exclusivamente validación cruzada.",
+    "note": "El test definitivo debe permanecer fuera de esta búsqueda.",
+    "code": "import numpy as np\nfrom sklearn.datasets import make_regression\nfrom sklearn.model_selection import GridSearchCV, KFold\nfrom sklearn.linear_model import Ridge\nfrom sklearn.pipeline import make_pipeline\nfrom sklearn.preprocessing import StandardScaler\n\nX, y = make_regression(n_samples=150, n_features=5, noise=10, random_state=42)\npipe = make_pipeline(StandardScaler(), Ridge())\ncv = KFold(n_splits=3, shuffle=True, random_state=42)\nsearch = GridSearchCV(pipe, {\"ridge__alpha\": [0.1, 1, 10]}, cv=cv,\n                      scoring=\"neg_mean_absolute_error\")\nsearch.fit(X, y)\nprint(search.best_params_, \"MAE CV:\", -search.best_score_)\n",
+    "source": "https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.html",
+    "validation": "executed"
+  },
+  "convexa": {
+    "title": "Asignar recursos con restricciones convexas",
+    "dependencies": "numpy cvxpy",
+    "inputs": "Costes ilustrativos y una demanda mínima de diez unidades.",
+    "output": "Asignación óptima y estado del solver.",
+    "note": "El problema es didáctico; comprueba convexidad, unidades y solver antes de escalar.",
+    "code": "import numpy as np\nimport cvxpy as cp\n\nx = cp.Variable(2, nonneg=True)\ncostes = np.array([1.0, 2.0])\nproblema = cp.Problem(cp.Minimize(costes @ x),\n                     [cp.sum(x) >= 10, x[0] <= 6])\nproblema.solve()\nprint(problema.status, x.value)  # Aproximadamente [6, 4].\n",
+    "source": "https://www.cvxpy.org/examples/basic/linear_program.html",
+    "validation": "syntax"
+  },
+  "industrial": {
+    "title": "Asignar tareas a dos máquinas con CP-SAT",
+    "dependencies": "ortools",
+    "inputs": "Tres tareas sintéticas de duración 3, 2 y 4.",
+    "output": "Carga mínima máxima y asignación discreta por máquina.",
+    "note": "El ejemplo equilibra carga; no modela precedencias ni calendarios.",
+    "code": "from ortools.sat.python import cp_model\n\nmodel = cp_model.CpModel()\nduracion = [3, 2, 4]\nx = {(t, m): model.new_bool_var(f\"t{t}_m{m}\") for t in range(3) for m in range(2)}\nfor t in range(3):\n    model.add(sum(x[t, m] for m in range(2)) == 1)\ncarga_max = model.new_int_var(0, sum(duracion), \"carga_max\")\nfor m in range(2):\n    model.add(sum(duracion[t] * x[t, m] for t in range(3)) <= carga_max)\nmodel.minimize(carga_max)\nsolver = cp_model.CpSolver()\nstatus = solver.solve(model)\nif status in (cp_model.OPTIMAL, cp_model.FEASIBLE):\n    print(\"Carga máxima:\", solver.value(carga_max))\n    print({t: m for t in range(3) for m in range(2) if solver.value(x[t, m])})\n",
+    "source": "https://developers.google.com/optimization/cp/cp_solver",
+    "validation": "syntax"
+  },
+  "llm": {
+    "title": "Generar texto con un modelo pequeño de referencia",
+    "dependencies": "torch transformers",
+    "inputs": "Prompt incluido; descarga inicial de distilbert/distilgpt2.",
+    "output": "Continuación del prompt en inglés.",
+    "note": "Modelo pequeño y didáctico, no un asistente industrial validado; requiere descarga inicial.",
+    "code": "from transformers import pipeline\n\n# Un modelo pequeño permite probar la API antes de elegir uno de dominio.\ngenerate = pipeline(\"text-generation\", model=\"distilbert/distilgpt2\", device=-1)\nresult = generate(\"The maintenance report indicates\", max_new_tokens=30,\n                  do_sample=False, pad_token_id=50256)\nprint(result[0][\"generated_text\"])\n",
+    "source": "https://huggingface.co/docs/transformers/main_classes/pipelines",
+    "validation": "syntax"
+  },
+  "rag": {
+    "title": "Recuperar un documento con embeddings y FAISS",
+    "dependencies": "sentence-transformers faiss-cpu numpy",
+    "inputs": "Tres textos incluidos; descarga del modelo multilingual MiniLM.",
+    "output": "Documento semánticamente más próximo a la consulta.",
+    "note": "Esto implementa recuperación, no un RAG completo ni una política de permisos.",
+    "code": "import numpy as np\nimport faiss\nfrom sentence_transformers import SentenceTransformer\n\ntextos = [\"Revisar vibraciones del motor\", \"Limpiar la cámara\", \"Cambiar el filtro de aceite\"]\nmodel = SentenceTransformer(\"sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2\")\n# Normalizar permite usar producto interno como similitud coseno.\nvectors = model.encode(textos, normalize_embeddings=True).astype(\"float32\")\nindex = faiss.IndexFlatIP(vectors.shape[1])\nindex.add(vectors)\nquery = model.encode([\"El motor vibra demasiado\"], normalize_embeddings=True).astype(\"float32\")\nscores, ids = index.search(query, k=1)\nprint(textos[int(ids[0, 0])], float(scores[0, 0]))\n",
+    "source": "https://www.sbert.net/examples/sentence_transformer/applications/semantic-search/README.html",
+    "validation": "syntax"
+  },
+  "difusion": {
+    "title": "Generar una imagen con un pipeline de difusión",
+    "dependencies": "torch diffusers transformers accelerate safetensors",
+    "inputs": "GPU CUDA compatible y acceso a los pesos de stabilityai/sdxl-turbo.",
+    "output": "Archivo pieza_generada.png.",
+    "note": "La memoria y licencia dependen del checkpoint. Esta imagen no valida un dataset sintético.",
+    "code": "import torch\nfrom diffusers import AutoPipelineForText2Image\n\nif not torch.cuda.is_available():\n    raise RuntimeError(\"Este ejemplo requiere una GPU CUDA\")\npipe = AutoPipelineForText2Image.from_pretrained(\n    \"stabilityai/sdxl-turbo\", torch_dtype=torch.float16, variant=\"fp16\")\npipe = pipe.to(\"cuda\")\nimage = pipe(\"A metal industrial component on a plain background\",\n             num_inference_steps=1, guidance_scale=0.0).images[0]\nimage.save(\"pieza_generada.png\")\n",
+    "source": "https://huggingface.co/docs/diffusers/using-diffusers/sdxl_turbo",
+    "validation": "syntax"
+  },
+  "servir-llm": {
+    "title": "Ejecutar un LLM cuantizado en local",
+    "dependencies": "llama-cpp-python",
+    "inputs": "Archivo modelo.gguf compatible descargado y memoria suficiente.",
+    "output": "Texto generado sin enviar el prompt a una API externa.",
+    "note": "Obtén un checkpoint con licencia adecuada; el rendimiento depende del modelo y del equipo.",
+    "code": "from pathlib import Path\nfrom llama_cpp import Llama\n\npath = Path(\"modelo.gguf\")\nif not path.is_file():\n    raise FileNotFoundError(\"Descarga un modelo GGUF compatible\")\nllm = Llama(model_path=str(path), n_ctx=2048, n_threads=4, verbose=False)\nresult = llm(\"Q: What is predictive maintenance?\\nA:\",\n             max_tokens=80, temperature=0.0, stop=[\"Q:\"])\nprint(result[\"choices\"][0][\"text\"])\n",
+    "source": "https://llama-cpp-python.readthedocs.io/en/latest/",
+    "validation": "syntax"
+  },
+  "inferencia": {
+    "title": "Exportar a ONNX y comprobar paridad en CPU",
+    "dependencies": "torch onnx onnxscript onnxruntime numpy",
+    "inputs": "Red lineal de ejemplo creada en el código.",
+    "output": "modelo.onnx y comparación numérica entre PyTorch y ONNX Runtime.",
+    "note": "Esta paridad es de un modelo mínimo; añade entradas y shapes representativos del modelo real.",
+    "code": "import numpy as np\nimport torch\nimport onnxruntime as ort\n\ntorch.manual_seed(42)\nmodel = torch.nn.Linear(3, 1).eval()\nx = torch.randn(1, 3)\ntorch.onnx.export(model, (x,), \"modelo.onnx\", dynamo=True,\n                  input_names=[\"entrada\"], output_names=[\"salida\"])\nsession = ort.InferenceSession(\"modelo.onnx\", providers=[\"CPUExecutionProvider\"])\nactual = session.run(None, {\"entrada\": x.numpy()})[0]\nwith torch.inference_mode():\n    esperado = model(x).numpy()\nnp.testing.assert_allclose(actual, esperado, rtol=1e-4, atol=1e-5)\nprint(\"Paridad numérica comprobada\", actual)\n",
+    "source": "https://docs.pytorch.org/tutorials/beginner/onnx/export_simple_model_to_onnx_tutorial.html",
+    "validation": "syntax"
+  },
+  "edge": {
+    "title": "Compilar un ONNX estático con TensorRT",
+    "dependencies": "TensorRT instalado para tu JetPack/CUDA y GPU NVIDIA compatible.",
+    "inputs": "modelo.onnx con formas estáticas y operadores soportados.",
+    "output": "Archivo modelo.engine compilado para el entorno actual.",
+    "note": "No supone una mejora de latencia medida. Evalúa precisión, memoria y p95 en el dispositivo final.",
+    "code": "from pathlib import Path\nimport tensorrt as trt\n\nlogger = trt.Logger(trt.Logger.WARNING)\nbuilder = trt.Builder(logger)\nnetwork = builder.create_network(0)\nparser = trt.OnnxParser(network, logger)\nif not parser.parse_from_file(\"modelo.onnx\"):\n    errors = [str(parser.get_error(i)) for i in range(parser.num_errors)]\n    raise RuntimeError(errors)\nconfig = builder.create_builder_config()\nconfig.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 28)\nengine = builder.build_serialized_network(network, config)\nif engine is None:\n    raise RuntimeError(\"No se pudo construir el engine\")\nPath(\"modelo.engine\").write_bytes(bytes(engine))\n",
+    "source": "https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/python-api-docs.html",
+    "validation": "syntax"
+  },
+  "api": {
+    "title": "Exponer un contrato de inferencia con FastAPI",
+    "dependencies": "fastapi uvicorn",
+    "inputs": "Guarda el código como api.py y ejecuta: uvicorn api:app --reload.",
+    "output": "POST /predict devuelve una etiqueta de demostración; /docs muestra el contrato.",
+    "note": "La regla es una demostración de API. Sustitúyela por tu modelo y valida concurrencia y errores.",
+    "code": "from fastapi import FastAPI\nfrom pydantic import BaseModel, Field\n\napp = FastAPI()\nclass Entrada(BaseModel):\n    temperatura: float = Field(ge=-20, le=150)\n\n@app.post(\"/predict\")\ndef predict(entrada: Entrada):\n    # Sustituye esta regla didáctica por la inferencia de tu modelo.\n    return {\"alarma\": entrada.temperatura > 80}\n\n# Ejemplo de body: {\"temperatura\": 90}\n# Respuesta: {\"alarma\": true}\n",
+    "source": "https://fastapi.tiangolo.com/tutorial/body/",
+    "validation": "syntax"
+  },
+  "experimentos": {
+    "title": "Registrar un experimento reproducible en MLflow",
+    "dependencies": "mlflow scikit-learn",
+    "inputs": "Dataset Iris incluido; almacenamiento local de MLflow.",
+    "output": "Run con parámetros, accuracy y artefacto del modelo.",
+    "note": "En un equipo, configura un tracking server y almacenamiento compartido con acceso adecuado.",
+    "code": "import mlflow\nimport mlflow.sklearn\nfrom sklearn.datasets import load_iris\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.ensemble import RandomForestClassifier\n\nX, y = load_iris(return_X_y=True)\nXtr, Xte, ytr, yte = train_test_split(X, y, stratify=y, random_state=42)\nmlflow.set_tracking_uri(\"file:./mlruns\")\nmlflow.set_experiment(\"baseline_iris\")\nwith mlflow.start_run():\n    model = RandomForestClassifier(n_estimators=50, random_state=42).fit(Xtr, ytr)\n    mlflow.log_params({\"n_estimators\": 50, \"seed\": 42})\n    mlflow.log_metric(\"accuracy_test\", model.score(Xte, yte))\n    mlflow.sklearn.log_model(model, name=\"model\", input_example=Xtr[:2])\n",
+    "source": "https://mlflow.org/docs/latest/ml/tracking/quickstart/",
+    "validation": "syntax"
+  },
+  "versionar": {
+    "title": "Versionar un CSV con DVC desde Python",
+    "dependencies": "dvc; repositorio Git con DVC ya inicializado.",
+    "inputs": "Archivo datos.csv real en el repositorio del proyecto.",
+    "output": "datos.csv.dvc y cambio en .gitignore para versionar metadatos con Git.",
+    "note": "DVC add no hace commit ni sube datos al remoto: configura el remoto y usa dvc push cuando corresponda.",
+    "code": "from pathlib import Path\nimport subprocess\n\nif not Path(\".dvc\").is_dir():\n    raise RuntimeError(\"Inicializa DVC en tu repositorio Git con dvc init\")\nif not Path(\"datos.csv\").is_file():\n    raise FileNotFoundError(\"Falta datos.csv\")\n# La CLI se invoca con argumentos separados, sin shell=True.\nsubprocess.run([\"dvc\", \"add\", \"datos.csv\"], check=True)\nprint(\"Versiona datos.csv.dvc y .gitignore con Git\")\n",
+    "source": "https://dvc.org/doc/command-reference/add",
+    "validation": "syntax"
+  },
+  "drift": {
+    "title": "Generar un informe de drift con Evidently",
+    "dependencies": "numpy pandas evidently",
+    "inputs": "Distribución de referencia y otra desplazada, ambas sintéticas.",
+    "output": "Archivo drift.html con el informe de comparación.",
+    "note": "Un cambio de distribución no prueba una pérdida de precisión; añade métricas con etiquetas cuando existan.",
+    "code": "import numpy as np\nimport pandas as pd\nfrom evidently import Report\nfrom evidently.presets import DataDriftPreset\n\nrng = np.random.default_rng(42)\nreference = pd.DataFrame({\"temperatura\": rng.normal(30, 2, 500)})\ncurrent = pd.DataFrame({\"temperatura\": rng.normal(35, 2, 500)})\nreport = Report([DataDriftPreset()])\nsnapshot = report.run(current_data=current, reference_data=reference)\nsnapshot.save_html(\"drift.html\")\nprint(\"Informe guardado en drift.html\")\n",
+    "source": "https://evidentlyai.github.io/evidently/api-reference/main/evidently/core/report.html",
+    "validation": "syntax"
+  }
+}
